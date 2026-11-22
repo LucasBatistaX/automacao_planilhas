@@ -1,0 +1,11 @@
+# planilhas reais de clientes nunca vão para o repositório
+fixtures/
+_teste_web/
+*.xlsx
+
+.venv/
+build/
+dist/
+*.spec
+__pycache__/
+.DS_Store

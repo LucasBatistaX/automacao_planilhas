@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preenchimento EFD REINF</title>
+<style>
+  :root {
+    --fundo: #F3F5F9; --card: #FFFFFF; --borda: #E2E6EE; --texto: #1F2937; --sutil: #6B7280;
+    --acento: #2563EB; --acento-hover: #1D4ED8; --ok: #16A34A; --erro: #DC2626; --aviso: #B45309;
+    --log: #F8FAFC; --trilho: #E5E9F2;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 28px 16px 40px; }
+  h1 { font-size: 26px; margin: 0; }
+  .sub { color: var(--sutil); margin: 4px 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+  .seletor { display: flex; align-items: center; gap: 12px; }
+  .seletor > div { flex: 1; min-width: 0; }
+  .titulo { font-weight: 700; }
+  .dica { color: var(--sutil); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dica.ok { color: var(--ok); }
+  hr { border: 0; border-top: 1px solid var(--borda); margin: 14px 0; }
+  button { font: inherit; cursor: pointer; border-radius: 8px; }
+  .sec { background: var(--card); color: var(--acento); border: 1px solid var(--borda); padding: 8px 14px; white-space: nowrap; }
+  .sec:hover:not(:disabled) { background: #EEF3FF; }
+  .acento { width: 100%; background: var(--acento); color: #fff; border: 0; padding: 14px; font-weight: 700; font-size: 16px; }
+  .acento:hover:not(:disabled) { background: var(--acento-hover); }
+  button:disabled { opacity: .55; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--sutil); font-weight: 600; background: var(--log); padding: 8px; }
+  td { padding: 8px; border-top: 1px solid var(--borda); word-break: break-word; }
+  .tabela-vazia { color: var(--sutil); font-size: 13px; }
+  .t-ok { color: var(--ok); } .t-erro { color: var(--erro); } .t-aviso { color: var(--aviso); }
+  .linha-barra { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; }
+  .linha-barra.pequena { font-weight: 400; color: var(--sutil); font-size: 13px; }
+  .linha-barra span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pct { color: var(--acento); }
+  progress { width: 100%; height: 10px; margin: 6px 0 12px; appearance: none; border: 0; border-radius: 6px; background: var(--trilho); overflow: hidden; }
+  progress::-webkit-progress-bar { background: var(--trilho); }
+  progress::-webkit-progress-value { background: var(--acento); transition: width .2s; }
+  progress::-moz-progress-bar { background: var(--acento); }
+  #log { background: var(--log); border: 1px solid var(--borda); border-radius: 8px; padding: 10px; height: 160px; overflow: auto;
+         font: 12px/1.5 Menlo, Consolas, monospace; white-space: pre-wrap; margin: 0; }
+  .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .downloads:empty { display: none; }
+  .downloads a { text-decoration: none; }
+  .rodape { color: var(--sutil); font-size: 12px; text-align: center; margin-top: 18px; }
+  .botoes { margin: 4px 0 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Preenchimento EFD REINF</h1>
+  <p class="sub">Copia as notas com DARF das planilhas UneCont para os Controles REINF, pareando pelo CNPJ da empresa.</p>
+
+  <section class="card">
+    <div class="seletor">
+      <div><div class="titulo">Planilhas de origem</div>
+        <div class="dica" id="dica-origens">UneCont - Serviços Tomados (selecione várias)</div></div>
+      <button class="sec" data-input="in-origens">Escolher planilhas</button>
+      <input type="file" id="in-origens" accept=".xlsx" multiple hidden>
+    </div>
+    <hr>
+    <div class="seletor">
+      <div><div class="titulo">Planilhas de destino</div>
+        <div class="dica" id="dica-destinos">Controle - EFD REINF Mensal (selecione várias)</div></div>
+      <button class="sec" data-input="in-destinos">Escolher planilhas</button>
+      <input type="file" id="in-destinos" accept=".xlsx" multiple hidden>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="titulo" style="margin-bottom:8px">Pares encontrados</div>
+    <table hidden id="tabela"><thead><tr><th>Origem(ns)</th><th>Destino</th><th>Status</th></tr></thead><tbody></tbody></table>
+    <div class="tabela-vazia" id="tabela-vazia">Escolha as planilhas de origem e de destino.</div>
+  </section>
+
+  <div class="botoes"><button class="acento" id="executar" disabled>Carregando o motor Python...</button></div>
+
+  <section class="card">
+    <div class="linha-barra"><span id="status-geral">Preparando...</span><span class="pct" id="pct-geral">0%</span></div>
+    <progress id="barra-geral" max="100" value="0"></progress>
+    <div class="linha-barra pequena"><span id="status">Arquivo atual</span><span class="pct" id="pct">0%</span></div>
+    <progress id="barra" max="100" value="0"></progress>
+    <pre id="log"></pre>
+    <div class="downloads" id="downloads"></div>
+  </section>
+
+  <p class="rodape">As planilhas são processadas no seu navegador e não são enviadas para nenhum servidor.</p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const worker = new Worker("worker.js");
+const sel = { origens: [], destinos: [] };
+let pronto = false, linhas = {};
+
+document.querySelectorAll("[data-input]").forEach((b) => b.onclick = () => $(b.dataset.input).click());
+for (const qual of ["origens", "destinos"]) {
+  $("in-" + qual).onchange = async (e) => {
+    const files = [...e.target.files].filter((f) => !f.name.startsWith("~$"));
+    if (!files.length) return;
+    sel[qual] = files;
+    const nomes = files.map((f) => f.name).join(", ");
+    $("dica-" + qual).textContent = `✓  ${files.length} planilha(s): ${nomes}`;
+    $("dica-" + qual).className = "dica ok";
+    const arquivos = await Promise.all(files.map(async (f) => ({ nome: f.name, bytes: await f.arrayBuffer() })));
+    worker.postMessage({ tipo: "arquivos", qual, arquivos, parear: sel.origens.length && sel.destinos.length },
+                       arquivos.map((a) => a.bytes));
+    e.target.value = "";
+  };
+}
+
+function log(msg, cls = "") {
+  const s = document.createElement("span");
+  s.textContent = msg + "\n";
+  if (cls) s.className = cls;
+  $("log").appendChild(s);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function linhaTabela(origens, destino, status, cls = "") {
+  const tr = document.createElement("tr");
+  for (const t of [origens, destino, status]) { const td = document.createElement("td"); td.textContent = t; tr.appendChild(td); }
+  if (cls) tr.lastChild.className = cls;
+  $("tabela").tBodies[0].appendChild(tr);
+  return tr;
+}
+
+function atualizarBotao() {
+  $("executar").disabled = !pronto || !Object.keys(linhas).length;
+  if (pronto) $("executar").textContent = "Executar preenchimento";
+}
+
+function baixar(nome, bytes, rotulo) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([bytes]));
+  a.download = nome;
+  a.innerHTML = `<button class="sec"></button>`;
+  a.firstChild.textContent = rotulo;
+  $("downloads").appendChild(a);
+}
+
+$("executar").onclick = () => {
+  $("executar").disabled = true;
+  $("executar").textContent = "Processando...";
+  $("log").textContent = "";
+  $("downloads").textContent = "";
+  $("barra").value = $("barra-geral").value = 0;
+  worker.postMessage({ tipo: "executar" });
+};
+
+worker.onmessage = ({ data: d }) => {
+  if (d.tipo === "pronto") {
+    pronto = true;
+    $("status-geral").textContent = "Pronto. Escolha as planilhas.";
+    atualizarBotao();
+  } else if (d.tipo === "falha") {
+    $("executar").textContent = "Falha ao carregar";
+    $("status-geral").textContent = "Não foi possível carregar o motor Python. Verifique a internet e recarregue.";
+    log(d.msg, "t-erro");
+  } else if (d.tipo === "pares") {
+    $("tabela").tBodies[0].textContent = "";
+    linhas = {};
+    for (const p of d.pares) linhas[p.destino] = linhaTabela(p.origens.join(", "), p.destino, "pronto");
+    for (const p of d.problemas) linhaTabela(p.arquivo, "-", p.motivo, "t-aviso");
+    $("tabela").hidden = false;
+    $("tabela-vazia").hidden = true;
+    $("status-geral").textContent = `${d.pares.length} par(es) prontos, ${d.problemas.length} arquivo(s) serão pulados`;
+    atualizarBotao();
+  } else if (d.tipo === "prog") {
+    const frac = d.total ? d.atual / d.total : 1;
+    const geral = ((d.arq - 1 + frac) / d.n) * 100;
+    $("barra-geral").value = geral; $("pct-geral").textContent = Math.floor(geral) + "%";
+    $("barra").value = frac * 100; $("pct").textContent = Math.floor(frac * 100) + "%";
+    $("status-geral").textContent = `Arquivo ${d.arq} de ${d.n}`;
+    $("status").textContent = d.msg;
+    const cls = d.msg.startsWith("ERRO") ? "t-erro" : /pulada|Não houve|criada/.test(d.msg) ? "t-aviso"
+              : /->|Concluído/.test(d.msg) ? "t-ok" : "";
+    log(d.msg, cls);
+  } else if (d.tipo === "fim") {
+    let ok = 0, notas = 0;
+    for (const r of d.resultados) {
+      const tr = linhas[r.arquivo];
+      if (r.status === "ok") { ok++; notas += r.inseridas; }
+      else if (r.status === "erro") log(`${r.arquivo}: ${r.motivo}`, "t-erro");
+      if (!tr) continue;
+      tr.lastChild.textContent = r.status === "ok" ? `✓ ${r.inseridas} inserida(s)` : "✗ erro";
+      tr.lastChild.className = r.status === "ok" ? "t-ok" : "t-erro";
+    }
+    $("barra-geral").value = 100; $("pct-geral").textContent = "100%";
+    $("status-geral").textContent = `Concluído: ${ok} planilha(s), ${notas} nota(s) inserida(s), ${d.resultados.length - ok} pulado(s)`;
+    if (d.arquivos.length > 1) baixar("preenchidos.zip", d.zip, `Baixar todas (.zip)`);
+    for (const a of d.arquivos) baixar(a.nome, a.bytes, `Baixar ${a.nome}`);
+    atualizarBotao();
+  } else if (d.tipo === "erro") {
+    log("ERRO: " + d.msg, "t-erro");
+    $("status-geral").textContent = "Erro";
+    atualizarBotao();
+  }
+};
+</script>
+</body>
+</html>
