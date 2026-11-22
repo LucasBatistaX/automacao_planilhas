@@ -47,6 +47,7 @@
   .downloads { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .downloads:empty { display: none; }
   .downloads a { text-decoration: none; }
+  .downloads .salvar { flex-basis: 100%; }
   .rodape { color: var(--sutil); font-size: 12px; text-align: center; margin-top: 18px; }
   .botoes { margin: 4px 0 14px; }
 </style>
@@ -144,6 +145,52 @@ function baixar(nome, bytes, rotulo) {
   $("downloads").appendChild(a);
 }
 
+const XLSX = { description: "Planilha Excel",
+               accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] } };
+let ultimos = [];  // arquivos preenchidos da última execução
+
+async function gravar(handle, bytes) {
+  const w = await handle.createWritable();
+  await w.write(bytes);
+  await w.close();
+}
+
+async function existe(dir, nome) {
+  try { await dir.getFileHandle(nome); return true; } catch { return false; }
+}
+
+// Abre a janela "Salvar como" (1 arquivo) ou "Escolher pasta" (vários).
+// Navegadores sem essa função (Safari, Firefox) caem no download normal.
+async function salvar() {
+  if (!ultimos.length) return;
+  if (!window.showSaveFilePicker) {
+    log("Este navegador não permite escolher o local. Os arquivos foram para a pasta Downloads.", "t-aviso");
+    $("downloads").querySelector("a").click();
+    return;
+  }
+  try {
+    if (ultimos.length === 1) {
+      const h = await showSaveFilePicker({ suggestedName: ultimos[0].nome, types: [XLSX] });
+      await gravar(h, ultimos[0].bytes);
+      log(`Salvo como ${h.name}`, "t-ok");
+    } else {
+      const dir = await showDirectoryPicker({ mode: "readwrite" });
+      for (const a of ultimos) {
+        // nunca sobrescreve um arquivo que já está na pasta (ex.: o destino original)
+        const nome = (await existe(dir, a.nome)) ? a.nome.replace(/\.xlsx$/i, "_preenchido.xlsx") : a.nome;
+        await gravar(await dir.getFileHandle(nome, { create: true }), a.bytes);
+        log(`Salvo em ${dir.name}/${nome}`, "t-ok");
+      }
+    }
+    $("status-geral").textContent = "Planilha(s) salva(s).";
+  } catch (e) {
+    if (e.name === "AbortError") log("Salvamento cancelado. Use o botão azul \"Salvar\" para escolher o local.", "t-aviso");
+    else if (e.name === "SecurityError" || e.name === "NotAllowedError")
+      $("status-geral").textContent = "Pronto! Clique no botão azul \"Salvar\" para escolher onde salvar.";
+    else log("Erro ao salvar: " + e.message, "t-erro");
+  }
+}
+
 $("executar").onclick = () => {
   $("executar").disabled = true;
   $("executar").textContent = "Processando...";
@@ -195,6 +242,15 @@ worker.onmessage = ({ data: d }) => {
     $("status-geral").textContent = `Concluído: ${ok} planilha(s), ${notas} nota(s) inserida(s), ${d.resultados.length - ok} pulado(s)`;
     if (d.arquivos.length > 1) baixar("preenchidos.zip", d.zip, `Baixar todas (.zip)`);
     for (const a of d.arquivos) baixar(a.nome, a.bytes, `Baixar ${a.nome}`);
+    ultimos = d.arquivos;
+    if (ultimos.length) {
+      const b = document.createElement("button");
+      b.className = "acento salvar";
+      b.textContent = ultimos.length === 1 ? "Salvar planilha..." : "Salvar planilhas em uma pasta...";
+      b.onclick = salvar;
+      $("downloads").prepend(b);
+      salvar();  // abre a janela de salvar logo ao terminar
+    }
     atualizarBotao();
   } else if (d.tipo === "erro") {
     log("ERRO: " + d.msg, "t-erro");
